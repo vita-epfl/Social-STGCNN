@@ -20,7 +20,7 @@ from data_load_utils import prepare_data
 from trajnet_utils import TrajectoryDataset
 from trajnetpp_eval_utils import trajnet_sample_eval, trajnet_sample_multi_eval
 
-def test(KSTEPS=20):
+def test(KSTEPS=3):
     global loader_test,model
     model.eval()
     ade_bigls = []
@@ -139,7 +139,7 @@ def test(KSTEPS=20):
 
 
 paths = ['./checkpoint/*social-stgcnn*']
-KSTEPS=20
+KSTEPS=3
 
 print("*"*50)
 print('Number of samples:',KSTEPS)
