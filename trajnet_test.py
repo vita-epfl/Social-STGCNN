@@ -21,9 +21,10 @@ from data_load_utils import prepare_data
 from trajnet_utils import TrajectoryDataset
 from trajnetpp_eval_utils import trajnet_sample_eval, trajnet_sample_multi_eval
 from trajnet_loader import trajnet_loader
+from helper_models import DummyGCN
 
 def test(KSTEPS=3):
-    global traj_test_loader, model
+    global traj_test_loader, model, norm_lap_matr
     model.eval()
     ade_bigls, fde_bigls = [], []
     raw_data_dict = {}
@@ -56,24 +57,24 @@ def test(KSTEPS=3):
         num_of_objs = obs_traj_rel.shape[1]
 
         # Forward
-        # V_obs = batch, seq, node, feat
-        # V_obs_tmp = batch, feat, seq, node
         V_obs_tmp = V_obs.permute(0, 3, 1, 2)
 
-        V_pred,_ = model(V_obs_tmp, A_obs.squeeze())
-        # print(V_pred.shape)
-        # torch.Size([1, 5, 12, 2])
-        # torch.Size([12, 2, 5])
+        # If there's only one pedestrian, handle it differently
+        if V_obs_tmp.shape[3] == 1:
+            single_ped_model = DummyGCN(model, args)
+            V_pred = single_ped_model(
+                obs_traj[0, ...], obs_traj_rel[0, ...], norm_lap_matr
+                )
+        else: 
+            V_pred,_ = model(V_obs_tmp, A_obs.squeeze())
         V_pred = V_pred.permute(0, 2, 3, 1)
-        # torch.Size([1, 12, 2, 5])>>seq,node,feat
-        # V_pred= torch.rand_like(V_tr).cuda()
 
-
-        V_tr = V_tr.squeeze()
-        A_tr = A_tr.squeeze()
-        V_pred = V_pred.squeeze()
+        V_tr = V_tr[0, ...]
+        A_tr = A_tr[0, ...]
+        V_pred = V_pred[0, ...]
         num_of_objs = obs_traj_rel.shape[1]
-        V_pred,V_tr =  V_pred[:,:num_of_objs,:],V_tr[:,:num_of_objs,:]
+        
+        V_pred, V_tr =  V_pred[:, :num_of_objs, :], V_tr[:,:num_of_objs,:]
         #print(V_pred.shape)
 
         #For now I have my bi-variate parameters 
@@ -187,6 +188,7 @@ for feta in range(len(paths)):
         
         args.obs_len = obs_seq_len
         args.pred_len = pred_seq_len
+        norm_lap_matr = True
         
         # Trajnet loader
         traj_test_loader = trajnet_loader(
@@ -196,7 +198,7 @@ for feta in range(len(paths)):
             test=True,
             keep_single_ped_scenes=True,
             fill_missing_obs=True,
-            norm_lap_matr=True
+            norm_lap_matr=norm_lap_matr
             )
 
         # Defining the model 
@@ -210,9 +212,6 @@ for feta in range(len(paths)):
         print("Testing ....")
         ad, fd, pred_c, gt_c, topk_ade, topk_fde = test()
         print("ADE:",ad," FDE:",fd, " Pred:", pred_c, " GT:", gt_c, " Top3 ADE:", topk_ade, " Top3 FDE:", topk_fde)
-
-
-
 
     print("*"*50)
 

@@ -14,7 +14,7 @@ def anorm(p1,p2):
     return 1/(NORM)
 
 
-def seq_to_graph(seq_,seq_rel,norm_lap_matr = True):
+def seq_to_graph(seq_, seq_rel, norm_lap_matr = True):
     seq_len = seq_.shape[2]
     max_nodes = seq_.shape[0]
 
@@ -284,7 +284,7 @@ def trajnet_loader(
             A_obs.append(a_.clone())
 
             # Predictions
-            v_, a_=seq_to_graph(
+            v_, a_= seq_to_graph(
                 pred_traj[start:end,:], pred_traj_rel[start:end, :], 
                 norm_lap_matr
                 )
