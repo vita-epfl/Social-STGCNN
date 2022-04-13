@@ -1,6 +1,7 @@
 import os
 import math
 import sys
+from textwrap import fill
 import torch
 import numpy as np
 from torch.utils.data import Dataset
@@ -19,39 +20,51 @@ import trajnetplusplustools
 from data_load_utils import prepare_data
 from trajnet_utils import TrajectoryDataset
 from trajnetpp_eval_utils import trajnet_sample_eval, trajnet_sample_multi_eval
+from trajnet_loader import trajnet_loader
 
 def test(KSTEPS=3):
-    global loader_test,model
+    global traj_test_loader, model
     model.eval()
-    ade_bigls = []
-    fde_bigls = []
+    ade_bigls, fde_bigls = [], []
     raw_data_dict = {}
-    step =0
+    step = 0
 
     ade_tot, fde_tot, pred_col_tot, gt_col_tot = 0., 0., 0., 0.
     topk_ade_tot, topk_fde_tot = 0., 0.
     num_batch = 0
-    for batch in loader_test: 
-        num_batch += 1
-        step+=1
-        #Get data
-        batch = [tensor.cuda() for tensor in batch]
-        obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped,\
-         loss_mask,V_obs,A_obs,V_tr,A_tr = batch
 
+    traj_test_loader = tqdm(traj_test_loader)
+
+    for batch in traj_test_loader: 
+        num_batch += 1
+        step += 1
+        # Get data
+        batch = [tensor.cuda() for tensor in batch]
+        # The rest of the code assumes batch size in the 0-th dimension
+        batch = [
+            torch.unsqueeze(tensor, 0) if len(tensor.shape) == 3 else tensor \
+            for tensor in batch
+            ]
+        
+        obs_traj, pred_traj_gt, \
+        obs_traj_rel, pred_traj_gt_rel, \
+        non_linear_ped, loss_mask, \
+        V_obs, A_obs, \
+        V_tr, A_tr = \
+            batch
 
         num_of_objs = obs_traj_rel.shape[1]
 
-        #Forward
-        #V_obs = batch,seq,node,feat
-        #V_obs_tmp = batch,feat,seq,node
-        V_obs_tmp =V_obs.permute(0,3,1,2)
+        # Forward
+        # V_obs = batch, seq, node, feat
+        # V_obs_tmp = batch, feat, seq, node
+        V_obs_tmp = V_obs.permute(0, 3, 1, 2)
 
-        V_pred,_ = model(V_obs_tmp,A_obs.squeeze())
+        V_pred,_ = model(V_obs_tmp, A_obs.squeeze())
         # print(V_pred.shape)
         # torch.Size([1, 5, 12, 2])
         # torch.Size([12, 2, 5])
-        V_pred = V_pred.permute(0,2,3,1)
+        V_pred = V_pred.permute(0, 2, 3, 1)
         # torch.Size([1, 12, 2, 5])>>seq,node,feat
         # V_pred= torch.rand_like(V_tr).cuda()
 
@@ -108,8 +121,6 @@ def test(KSTEPS=3):
 
             V_pred = mvnormal.sample()
 
-
-
             #V_pred = seq_to_nodes(pred_traj_gt.data.numpy().copy())
             V_pred_rel_to_abs = nodes_rel_to_nodes_abs(V_pred.data.cpu().numpy().squeeze().copy(),
                                                      V_x[-1,:,:].copy())
@@ -146,8 +157,6 @@ print('Number of samples:',KSTEPS)
 print("*"*50)
 
 
-
-
 for feta in range(len(paths)):
     ade_ls = [] 
     fde_ls = [] 
@@ -169,38 +178,37 @@ for feta in range(len(paths)):
             cm = pickle.load(f)
         print("Stats:",cm)
 
-
-
-        #Data prep     
+        # Data prep     
         obs_seq_len = args.obs_seq_len
         pred_seq_len = args.pred_seq_len
-        test_dataset, _, _ = prepare_data('datasets/' + args.dataset, subset='/test_private/', sample=1.0)
-        dset_test = TrajectoryDataset(
-                test_dataset,
-                obs_len=obs_seq_len,
-                pred_len=pred_seq_len,
-                skip=1,norm_lap_matr=True,
-                test=True)
+        test_loader, _, _ = prepare_data(
+            'datasets/' + args.dataset, subset='/test_private/', sample=1.0
+            )
+        
+        args.obs_len = obs_seq_len
+        args.pred_len = pred_seq_len
+        
+        # Trajnet loader
+        traj_test_loader = trajnet_loader(
+            test_loader, 
+            args,
+            drop_distant_ped=False,
+            test=True,
+            keep_single_ped_scenes=True,
+            fill_missing_obs=True,
+            norm_lap_matr=True
+            )
 
-        loader_test = DataLoader(
-                dset_test,
-                batch_size=1,#This is irrelative to the args batch size parameter
-                shuffle =False,
-                num_workers=1)
-
-
-
-        #Defining the model 
+        # Defining the model 
         model = social_stgcnn(n_stgcnn =args.n_stgcnn,n_txpcnn=args.n_txpcnn,
         output_feat=args.output_size,seq_len=args.obs_seq_len,
         kernel_size=args.kernel_size,pred_seq_len=args.pred_seq_len).cuda()
         model.load_state_dict(torch.load(model_path))
 
-
-        ade_ =999999
-        fde_ =999999
+        ade_ = 999999
+        fde_ = 999999
         print("Testing ....")
-        ad,fd,pred_c, gt_c, topk_ade, topk_fde= test()
+        ad, fd, pred_c, gt_c, topk_ade, topk_fde = test()
         print("ADE:",ad," FDE:",fd, " Pred:", pred_c, " GT:", gt_c, " Top3 ADE:", topk_ade, " Top3 FDE:", topk_fde)
 
 
