@@ -32,8 +32,14 @@ from model import *
 import trajnetplusplustools
 from data_load_utils import prepare_data
 from trajnet_utils import TrajectoryDataset
+from trajnet_loader import trajnet_loader
+from helper_models import DummyGCN
 
 parser = argparse.ArgumentParser()
+
+# Trajnet loader
+parser.add_argument("--fill_missing_obs", default=1, type=int)
+parser.add_argument("--keep_single_ped_scenes", default=1, type=int)
 
 #Model specific parameters
 parser.add_argument('--input_size', type=int, default=2)
@@ -69,10 +75,6 @@ args = parser.parse_args()
 
 
 
-
-
-
-
 print('*'*30)
 print("Training initiating....")
 print(args)
@@ -82,37 +84,43 @@ def graph_loss(V_pred,V_target):
     return bivariate_loss(V_pred,V_target)
 
 #Data prep     
-obs_seq_len = args.obs_seq_len
-pred_seq_len = args.pred_seq_len
-# data_set = './datasets/'+args.dataset+'/'
+args.obs_len = args.obs_seq_len
+args.pred_len = args.pred_seq_len
+norm_lap_matr = True
 
+# Trajnet train loader
+train_loader, _, _ = prepare_data(
+    'datasets/' + args.dataset, subset='/train/', sample=args.sample
+    )
 
-train_dataset, _, _ = prepare_data('datasets/' + args.dataset, subset='/train/', sample=args.sample)
-dset_train = TrajectoryDataset(
-        train_dataset,
-        obs_len=obs_seq_len,
-        pred_len=pred_seq_len,
-        skip=1,norm_lap_matr=True)
+traj_train_loader = trajnet_loader(
+    train_loader, 
+    args,
+    drop_distant_ped=False,
+    test=False,
+    keep_single_ped_scenes=args.keep_single_ped_scenes,
+    fill_missing_obs=args.fill_missing_obs,
+    norm_lap_matr=norm_lap_matr
+    )
+traj_train_loader = tqdm(traj_train_loader)
+traj_train_loader = list(traj_train_loader)
 
-loader_train = DataLoader(
-        dset_train,
-        batch_size=1, #This is irrelative to the args batch size parameter
-        shuffle =True,
-        num_workers=0)
+# Trajnet val loader
+val_loader, _, _ = prepare_data(
+    'datasets/' + args.dataset, subset='/val/', sample=args.sample
+    )
 
-val_dataset, _, _ = prepare_data('datasets/' + args.dataset, subset='/val/', sample=args.sample)
-dset_val = TrajectoryDataset(
-        val_dataset,
-        obs_len=obs_seq_len,
-        pred_len=pred_seq_len,
-        skip=1,norm_lap_matr=True)
-
-loader_val = DataLoader(
-        dset_val,
-        batch_size=1, #This is irrelative to the args batch size parameter
-        shuffle =False,
-        num_workers=1)
-
+traj_val_loader = trajnet_loader(
+    val_loader, 
+    args,
+    drop_distant_ped=False,
+    test=True,
+    keep_single_ped_scenes=args.keep_single_ped_scenes,
+    fill_missing_obs=args.fill_missing_obs,
+    norm_lap_matr=norm_lap_matr
+    )
+traj_val_loader = tqdm(traj_val_loader)
+traj_val_loader = list(traj_val_loader)
 
 #Defining the model 
 
@@ -148,39 +156,50 @@ metrics = {'train_loss':[],  'val_loss':[]}
 constant_metrics = {'min_val_epoch':-1, 'min_val_loss':9999999999999999}
 
 def train(epoch):
-    global metrics,loader_train
+    global metrics, traj_train_loader
     model.train()
     loss_batch = 0 
     batch_count = 0
     is_fst_loss = True
-    loader_len = len(loader_train)
+    loader_len = len(traj_train_loader)
     turn_point =int(loader_len/args.batch_size)*args.batch_size+ loader_len%args.batch_size -1
 
 
-    for cnt,batch in enumerate(loader_train): 
+    for cnt,batch in enumerate(traj_train_loader): 
         batch_count+=1
 
-        #Get data
+        # Get data
         batch = [tensor.cuda() for tensor in batch]
-        obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped,\
-         loss_mask,V_obs,A_obs,V_tr,A_tr = batch
-
+        # The rest of the code assumes batch size in the 0-th dimension
+        batch = [
+            torch.unsqueeze(tensor, 0) if len(tensor.shape) == 3 else tensor \
+            for tensor in batch
+            ]
+        
+        obs_traj, pred_traj_gt, \
+        obs_traj_rel, pred_traj_gt_rel, \
+        non_linear_ped, loss_mask, \
+        V_obs, A_obs, \
+        V_tr, A_tr = \
+            batch
 
         optimizer.zero_grad()
         #Forward
-        #V_obs = batch,seq,node,feat
-        #V_obs_tmp = batch,feat,seq,node
-        V_obs_tmp =V_obs.permute(0,3,1,2)
+        V_obs_tmp = V_obs.permute(0, 3, 1, 2)
 
-        V_pred,_ = model(V_obs_tmp,A_obs.squeeze())
+        # If there's only one pedestrian, handle it differently
+        if V_obs_tmp.shape[3] == 1:
+            single_ped_model = DummyGCN(model, args)
+            V_pred = single_ped_model(
+                obs_traj[0, ...], obs_traj_rel[0, ...], norm_lap_matr
+                )
+        else: 
+            V_pred, _ = model(V_obs_tmp, A_obs.squeeze())
+        V_pred = V_pred.permute(0, 2, 3, 1)
         
-        V_pred = V_pred.permute(0,2,3,1)
-        
-        
-
-        V_tr = V_tr.squeeze()
-        A_tr = A_tr.squeeze()
-        V_pred = V_pred.squeeze()
+        V_tr = V_tr[0, ...]
+        A_tr = A_tr[0, ...]
+        V_pred = V_pred[0, ...]
 
         if batch_count%args.batch_size !=0 and cnt != turn_point :
             l = graph_loss(V_pred,V_tr)
@@ -198,11 +217,10 @@ def train(epoch):
             if args.clip_grad is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(),args.clip_grad)
 
-
             optimizer.step()
-            #Metrics
+            # Metrics
             loss_batch += loss.item()
-            print('TRAIN:','\t Epoch:', epoch,'\t Loss:',loss_batch/batch_count)
+            print('TRAIN:', '\t Epoch:', epoch, '\t Loss:', loss_batch/batch_count)
             
     metrics['train_loss'].append(loss_batch/batch_count)
     
@@ -210,32 +228,48 @@ def train(epoch):
 
 
 def vald(epoch):
-    global metrics,loader_val,constant_metrics
+    global metrics, traj_val_loader, constant_metrics
     model.eval()
     loss_batch = 0 
     batch_count = 0
     is_fst_loss = True
-    loader_len = len(loader_val)
+    loader_len = len(traj_val_loader)
     turn_point =int(loader_len/args.batch_size)*args.batch_size+ loader_len%args.batch_size -1
     
-    for cnt,batch in enumerate(loader_val): 
+    for cnt,batch in enumerate(traj_val_loader): 
         batch_count+=1
 
-        #Get data
+        # Get data
         batch = [tensor.cuda() for tensor in batch]
-        obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped,\
-         loss_mask,V_obs,A_obs,V_tr,A_tr = batch
-        
+        # The rest of the code assumes batch size in the 0-th dimension
+        batch = [
+            torch.unsqueeze(tensor, 0) if len(tensor.shape) == 3 else tensor \
+            for tensor in batch
+            ]
 
-        V_obs_tmp =V_obs.permute(0,3,1,2)
+        obs_traj, pred_traj_gt, \
+        obs_traj_rel, pred_traj_gt_rel, \
+        non_linear_ped, loss_mask, \
+        V_obs, A_obs, \
+        V_tr, A_tr = \
+            batch        
 
-        V_pred,_ = model(V_obs_tmp,A_obs.squeeze())
-        
-        V_pred = V_pred.permute(0,2,3,1)
-        
-        V_tr = V_tr.squeeze()
-        A_tr = A_tr.squeeze()
-        V_pred = V_pred.squeeze()
+        # Forward
+        V_obs_tmp = V_obs.permute(0, 3, 1, 2)
+
+        # If there's only one pedestrian, handle it differently
+        if V_obs_tmp.shape[3] == 1:
+            single_ped_model = DummyGCN(model, args)
+            V_pred = single_ped_model(
+                obs_traj[0, ...], obs_traj_rel[0, ...], norm_lap_matr
+                )
+        else: 
+            V_pred, _ = model(V_obs_tmp, A_obs.squeeze())
+        V_pred = V_pred.permute(0, 2, 3, 1)
+
+        V_tr = V_tr[0, ...]
+        A_tr = A_tr[0, ...]
+        V_pred = V_pred[0, ...]
 
         if batch_count%args.batch_size !=0 and cnt != turn_point :
             l = graph_loss(V_pred,V_tr)

@@ -66,7 +66,7 @@ def test(KSTEPS=3):
                 obs_traj[0, ...], obs_traj_rel[0, ...], norm_lap_matr
                 )
         else: 
-            V_pred,_ = model(V_obs_tmp, A_obs.squeeze())
+            V_pred, _ = model(V_obs_tmp, A_obs.squeeze())
         V_pred = V_pred.permute(0, 2, 3, 1)
 
         V_tr = V_tr[0, ...]
@@ -184,15 +184,13 @@ for feta in range(len(paths)):
         print("Stats:",cm)
 
         # Data prep     
-        obs_seq_len = args.obs_seq_len
-        pred_seq_len = args.pred_seq_len
+        args.obs_len = args.obs_seq_len
+        args.pred_len = args.pred_seq_len
+        norm_lap_matr = True
+
         test_loader, _, _ = prepare_data(
             'datasets/' + args.dataset, subset='/test_private/', sample=1.0
             )
-        
-        args.obs_len = obs_seq_len
-        args.pred_len = pred_seq_len
-        norm_lap_matr = True
         
         # Trajnet loader
         traj_test_loader = trajnet_loader(
