@@ -73,7 +73,7 @@ def test(KSTEPS=3):
         A_tr = A_tr[0, ...]
         V_pred = V_pred[0, ...]
         num_of_objs = obs_traj_rel.shape[1]
-        
+
         V_pred, V_tr =  V_pred[:, :num_of_objs, :], V_tr[:,:num_of_objs,:]
         #print(V_pred.shape)
 
@@ -84,14 +84,14 @@ def test(KSTEPS=3):
         sy = torch.exp(V_pred[:,:,3]) #sy
         corr = torch.tanh(V_pred[:,:,4]) #corr
         
-        cov = torch.zeros(V_pred.shape[0],V_pred.shape[1],2,2).cuda()
+        cov = torch.zeros(V_pred.shape[0], V_pred.shape[1], 2, 2).cuda()
         cov[:,:,0,0]= sx*sx
         cov[:,:,0,1]= corr*sx*sy
         cov[:,:,1,0]= corr*sx*sy
         cov[:,:,1,1]= sy*sy
         mean = V_pred[:,:,0:2]
         
-        mvnormal = torchdist.MultivariateNormal(mean,cov)
+        mvnormal = torchdist.MultivariateNormal(mean, cov)
 
 
         ### Rel to abs 
@@ -101,12 +101,14 @@ def test(KSTEPS=3):
         ade_ls = {}
         fde_ls = {}
         V_x = seq_to_nodes(obs_traj.data.cpu().numpy().copy())
-        V_x_rel_to_abs = nodes_rel_to_nodes_abs(V_obs.data.cpu().numpy().squeeze().copy(),
-                                                 V_x[0,:,:].copy())
+        V_x_rel_to_abs = nodes_rel_to_nodes_abs(
+            V_obs.data.cpu().numpy().copy()[0, ...], V_x[0,:,:].copy()
+            )
 
         V_y = seq_to_nodes(pred_traj_gt.data.cpu().numpy().copy())
-        V_y_rel_to_abs = nodes_rel_to_nodes_abs(V_tr.data.cpu().numpy().squeeze().copy(),
-                                                 V_x[-1,:,:].copy())
+        V_y_rel_to_abs = nodes_rel_to_nodes_abs(
+            V_tr.data.cpu().numpy().copy(), V_x[-1,:,:].copy()
+            )
         
         raw_data_dict[step] = {}
         raw_data_dict[step]['obs'] = copy.deepcopy(V_x_rel_to_abs)
@@ -123,8 +125,10 @@ def test(KSTEPS=3):
             V_pred = mvnormal.sample()
 
             #V_pred = seq_to_nodes(pred_traj_gt.data.numpy().copy())
-            V_pred_rel_to_abs = nodes_rel_to_nodes_abs(V_pred.data.cpu().numpy().squeeze().copy(),
-                                                     V_x[-1,:,:].copy())
+            V_pred_rel_to_abs = nodes_rel_to_nodes_abs(
+                V_pred.data.cpu().numpy().copy(), V_x[-1,:,:].copy()
+                )
+
             raw_data_dict[step]['pred'].append(copy.deepcopy(V_pred_rel_to_abs))
             
             multi_preds.append(copy.deepcopy(V_pred_rel_to_abs).transpose(1, 0, 2))
