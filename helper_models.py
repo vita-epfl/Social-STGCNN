@@ -20,6 +20,7 @@ class DummyGCN:
         
         # Initializing a static dummy pedestrian somewhere far away in the frame
         dummy_coords = torch.tensor([-1000., -1000.]).view(2, 1)
+        zero_vels = torch.tensor([0., 0.]).view(2, 1)
 
         # Initialize with ones [peds, coords, frames]
         obs_traj_padded = torch.ones(2, 2, self.obs_len)
@@ -31,7 +32,7 @@ class DummyGCN:
 
         # Add the static dummy pedestrian
         obs_traj_padded[1, :, :] = dummy_coords
-        obs_traj_rel_padded[1, :, :] = dummy_coords
+        obs_traj_rel_padded[1, :, :] = zero_vels
 
         # Convert to graph
         V_obs_padded, A_obs_padded = \
