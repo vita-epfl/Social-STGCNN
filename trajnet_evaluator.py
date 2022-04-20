@@ -184,7 +184,7 @@ def get_predictions(args):
 
             # Get all predictions in parallel. Faster!
             scenes_loader = tqdm(scenes_loader)
-            pred_list = Parallel(n_jobs=1)(
+            pred_list = Parallel(n_jobs=args.n_jobs)(
                 delayed(predict_scene)(model, batch, args)
                 for batch in scenes_loader
                 )
@@ -207,6 +207,7 @@ def main():
     parser.add_argument("--fill_missing_obs", default=1, type=int)
     parser.add_argument("--keep_single_ped_scenes", default=1, type=int)
     parser.add_argument("--norm_lap_matr", default=1, type=int)
+    parser.add_argument("--n_jobs", default=8, type=int)
 
     new_args = parser.parse_args()
 
@@ -220,6 +221,7 @@ def main():
     args.keep_single_ped_scenes = new_args.keep_single_ped_scenes
     args.norm_lap_matr = new_args.norm_lap_matr
     args.modes = new_args.modes
+    args.n_jobs = new_args.n_jobs
 
     # Load corresponding statistics
     stats_path = os.path.join(new_args.checkpoint_dir, 'constant_metrics.pkl')
