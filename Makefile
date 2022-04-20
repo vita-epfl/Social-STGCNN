@@ -15,3 +15,8 @@
 	CUDA_VISIBLE_DEVICES=1 python3 trajnet_test.py
 	# For TrajNet++
 	# CUDA_VISIBLE_DEVICES=1 python3 trajnet_test.py --obs_seq_len 9
+
+@ test_trajnet:
+	CUDA_VISIBLE_DEVICES=1 python3 -m trajnet_evaluator \
+		--dataset_name colfree_trajdata --write_only
+		

@@ -95,18 +95,10 @@ def predict_scene(model, batch, args):
         V_pred_rel_to_abs = nodes_rel_to_nodes_abs(
             V_pred.data.cpu().numpy().copy(), V_x[-1, :, :].copy()
             )
-
-        multimodal_outputs[num_p] = \
-            copy.deepcopy(V_pred_rel_to_abs).transpose(1, 0, 2)
-
-
-    #### TODO ####
-    #   - check the shape of these outputs and compare them to what's expected
-    #     (i.e. the same output as in STGAT)
     
-    # output_primary = pred_traj_fake[:, 0]
-    # output_neighs = pred_traj_fake[:, 1:]
-    # multimodal_outputs[num_p] = [output_primary, output_neighs]
+    output_primary = V_pred_rel_to_abs[:, 0]
+    output_neighs = V_pred_rel_to_abs[:, 1:]
+    multimodal_outputs[num_p] = [output_primary, output_neighs]
 
     return multimodal_outputs
 
@@ -196,6 +188,11 @@ def get_predictions(args):
 def main():
     # Define new arguments to overwrite the existing ones
     parser = argparse.ArgumentParser()
+    parser.add_argument("--fill_missing_obs", default=1, type=int)
+    parser.add_argument("--keep_single_ped_scenes", default=1, type=int)
+    parser.add_argument("--norm_lap_matr", default=1, type=int)
+    parser.add_argument("--n_jobs", default=1, type=int)
+    parser.add_argument("--dataset_name", default="eth_data", type=str)
     parser.add_argument(
         "--checkpoint_dir", type=str,
         default="./checkpoint/social-stgcnn-trajnet-data"
@@ -203,11 +200,19 @@ def main():
     parser.add_argument(
         '--modes', default=1, type=int, help='number of modes to predict'
         )
-
-    parser.add_argument("--fill_missing_obs", default=1, type=int)
-    parser.add_argument("--keep_single_ped_scenes", default=1, type=int)
-    parser.add_argument("--norm_lap_matr", default=1, type=int)
-    parser.add_argument("--n_jobs", default=8, type=int)
+    parser.add_argument(
+        '--write_only', action='store_true', help='disable writing new files'
+        )
+    parser.add_argument(
+        '--disable-collision', action='store_true', 
+        help='disable collision metrics'
+        )
+    parser.add_argument(
+        '--labels', required=False, nargs='+', help='labels of models'
+        )
+    parser.add_argument(
+        '--normalize_scene', action='store_true', help='augment scenes'
+        )
 
     new_args = parser.parse_args()
 
@@ -222,7 +227,12 @@ def main():
     args.norm_lap_matr = new_args.norm_lap_matr
     args.modes = new_args.modes
     args.n_jobs = new_args.n_jobs
-
+    args.dataset_name = new_args.dataset_name
+    args.write_only = new_args.write_only
+    args.disable_collision = new_args.disable_collision
+    args.labels = new_args.labels
+    args.normalize_scene = new_args.normalize_scene
+    
     # Load corresponding statistics
     stats_path = os.path.join(new_args.checkpoint_dir, 'constant_metrics.pkl')
     with open(stats_path, 'rb') as f: 
