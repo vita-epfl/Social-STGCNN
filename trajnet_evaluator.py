@@ -192,6 +192,7 @@ def main():
     parser.add_argument("--keep_single_ped_scenes", default=1, type=int)
     parser.add_argument("--norm_lap_matr", default=1, type=int)
     parser.add_argument("--n_jobs", default=1, type=int)
+    parser.add_argument("--batch_size", default=1, type=int)
     parser.add_argument("--dataset_name", default="eth_data", type=str)
     parser.add_argument(
         "--checkpoint_dir", type=str,
@@ -232,6 +233,7 @@ def main():
     args.disable_collision = new_args.disable_collision
     args.labels = new_args.labels
     args.normalize_scene = new_args.normalize_scene
+    args.batch_size = new_args.batch_size
     
     # Load corresponding statistics
     stats_path = os.path.join(new_args.checkpoint_dir, 'constant_metrics.pkl')

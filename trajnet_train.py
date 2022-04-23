@@ -156,7 +156,7 @@ metrics = {'train_loss':[],  'val_loss':[]}
 constant_metrics = {'min_val_epoch':-1, 'min_val_loss':9999999999999999}
 
 def train(epoch):
-    global metrics, traj_train_loader
+    global args, metrics, traj_train_loader
     model.train()
     loss_batch = 0 
     batch_count = 0
@@ -201,7 +201,7 @@ def train(epoch):
         A_tr = A_tr[0, ...]
         V_pred = V_pred[0, ...]
 
-        if batch_count%args.batch_size !=0 and cnt != turn_point :
+        if args.batch_size == 1 or (batch_count%args.batch_size !=0 and cnt != turn_point):
             l = graph_loss(V_pred,V_tr)
             if is_fst_loss :
                 loss = l
@@ -228,7 +228,7 @@ def train(epoch):
 
 
 def vald(epoch):
-    global metrics, traj_val_loader, constant_metrics
+    global args, metrics, traj_val_loader, constant_metrics
     model.eval()
     loss_batch = 0 
     batch_count = 0
@@ -271,7 +271,7 @@ def vald(epoch):
         A_tr = A_tr[0, ...]
         V_pred = V_pred[0, ...]
 
-        if batch_count%args.batch_size !=0 and cnt != turn_point :
+        if args.batch_size == 1 or (batch_count%args.batch_size !=0 and cnt != turn_point):
             l = graph_loss(V_pred,V_tr)
             if is_fst_loss :
                 loss = l
