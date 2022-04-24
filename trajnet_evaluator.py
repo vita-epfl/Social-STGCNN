@@ -96,9 +96,9 @@ def predict_scene(model, batch, args):
             V_pred.data.cpu().numpy().copy(), V_x[-1, :, :].copy()
             )
     
-    output_primary = V_pred_rel_to_abs[:, 0]
-    output_neighs = V_pred_rel_to_abs[:, 1:]
-    multimodal_outputs[num_p] = [output_primary, output_neighs]
+        output_primary = V_pred_rel_to_abs[:, 0]
+        output_neighs = V_pred_rel_to_abs[:, 1:]
+        multimodal_outputs[num_p] = [output_primary, output_neighs]
 
     return multimodal_outputs
 
